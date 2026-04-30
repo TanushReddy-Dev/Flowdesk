@@ -10,16 +10,38 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { emails, events } = await req.json();
-    
-    if (!emails || !events) {
-      return NextResponse.json({ error: "Missing emails or events data" }, { status: 400 });
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
-    const briefing = await generateDailyBriefing(emails, events);
+    const { emails, events } = body;
+    if (!emails || !events) {
+      return NextResponse.json(
+        { error: "Missing emails or events data" },
+        { status: 400 }
+      );
+    }
+
+    let briefing;
+    try {
+      briefing = await generateDailyBriefing(emails, events);
+    } catch (geminiError: any) {
+      console.error("Gemini briefing error:", geminiError);
+      return NextResponse.json(
+        { error: "AI service unavailable" },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json({ briefing });
   } catch (error: any) {
-    console.error("Briefing API error:", error);
-    return NextResponse.json({ error: error.message || "Failed to generate briefing" }, { status: 500 });
+    console.error("Briefing route error:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to generate briefing" },
+      { status: 500 }
+    );
   }
 }

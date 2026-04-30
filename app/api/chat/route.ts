@@ -12,17 +12,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { messages } = await req.json();
+    let body;
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+
+    const { messages } = body;
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages format" }, { status: 400 });
     }
 
-    // Fetch context
     const accessToken = (session as any).accessToken;
-    const [emails, events] = await Promise.all([
-      fetchUnreadEmails(accessToken, 5), // Limit to 5 for context token limit
-      fetchTodayEvents(accessToken),
-    ]);
+
+    // Fetch context — degrade gracefully if Google APIs fail
+    let emails: any[] = [];
+    let events: any[] = [];
+    try {
+      [emails, events] = await Promise.all([
+        fetchUnreadEmails(accessToken, 5),
+        fetchTodayEvents(accessToken),
+      ]);
+    } catch (googleError: any) {
+      console.error("Google API error during chat context fetch:", googleError);
+      // Continue with empty context — chat can still work
+    }
 
     const systemContext = `
       You are FlowDesk, a professional executive assistant.
@@ -33,42 +48,60 @@ export async function POST(req: Request) {
       
       Answer the user's questions about their day based ONLY on this context. Be concise, helpful, and professional.
     `;
-    const model = getGeminiModel("gemini-2.5-flash");
+
+    let model;
+    try {
+      model = getGeminiModel("gemini-2.5-flash");
+    } catch (geminiError: any) {
+      console.error("Gemini init error:", geminiError);
+      return NextResponse.json({ error: "AI service unavailable" }, { status: 503 });
+    }
+
     // Convert messages format for Gemini
     const history = messages.slice(0, -1).map((m: any) => ({
       role: m.role === "user" ? "user" : "model",
       parts: [{ text: m.content }],
     }));
-    
-    // Add system context to the first message or history if empty
+
+    // Add system context to history
     if (history.length === 0) {
       history.push({ role: "user", parts: [{ text: systemContext }] });
       history.push({ role: "model", parts: [{ text: "Understood. How can I help you today?" }] });
     } else {
-      // Modify first user message to include system context
       history[0].parts[0].text = `${systemContext}\n\n${history[0].parts[0].text}`;
     }
 
-    const chat = model.startChat({ history });
-    
-    const lastMessage = messages[messages.length - 1].content;
-    const result = await chat.sendMessageStream(lastMessage);
+    try {
+      const chat = model.startChat({ history });
+      const lastMessage = messages[messages.length - 1].content;
+      const result = await chat.sendMessageStream(lastMessage);
 
-    const stream = new ReadableStream({
-      async start(controller) {
-        for await (const chunk of result.stream) {
-          const chunkText = chunk.text();
-          controller.enqueue(new TextEncoder().encode(chunkText));
-        }
-        controller.close();
-      },
-    });
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of result.stream) {
+              controller.enqueue(new TextEncoder().encode(chunk.text()));
+            }
+          } catch (streamError) {
+            console.error("Stream error:", streamError);
+          } finally {
+            controller.close();
+          }
+        },
+      });
 
-    return new Response(stream, {
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    });
+      return new Response(stream, {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    } catch (geminiError: any) {
+      console.error("Gemini chat error:", geminiError);
+      return NextResponse.json({ error: "AI service unavailable" }, { status: 503 });
+    }
   } catch (error: any) {
-    console.error("Chat API error:", error);
-    return NextResponse.json({ error: error.message || "Failed to process chat" }, { status: 500 });
+    console.error("Chat route error:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to process chat" },
+      { status: 500 }
+    );
   }
 }

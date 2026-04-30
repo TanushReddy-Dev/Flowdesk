@@ -4,16 +4,18 @@ import { EmailInfo } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Mail, Reply } from "lucide-react";
+import { Mail, Reply, RefreshCw, AlertCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface Props {
   emails: EmailInfo[];
   loading: boolean;
+  error: string;
   onDraftReply: (email: EmailInfo) => void;
+  onRetry: () => void;
 }
 
-export default function EmailList({ emails, loading, onDraftReply }: Props) {
+export default function EmailList({ emails, loading, error, onDraftReply, onRetry }: Props) {
   return (
     <Card className="col-span-1 shadow-sm">
       <CardHeader className="border-b bg-neutral-50/50 pb-4">
@@ -35,16 +37,32 @@ export default function EmailList({ emails, loading, onDraftReply }: Props) {
                 <Skeleton className="h-3 w-full" />
               </div>
             ))
+          ) : error ? (
+            <div className="p-8 text-center flex flex-col items-center gap-3">
+              <div className="bg-red-50 p-3 rounded-full">
+                <AlertCircle className="h-6 w-6 text-red-400" aria-hidden="true" />
+              </div>
+              <p className="text-neutral-600 text-sm">Unable to load emails right now.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRetry}
+                aria-label="Retry loading emails"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" />
+                Try again
+              </Button>
+            </div>
           ) : emails.length === 0 ? (
             <div className="p-8 text-center text-neutral-500 flex flex-col items-center">
-              <div className="bg-neutral-100 p-3 rounded-full mb-3">
-                <Mail className="h-6 w-6 text-neutral-400" />
+              <div className="bg-green-50 p-3 rounded-full mb-3">
+                <Mail className="h-6 w-6 text-green-400" aria-hidden="true" />
               </div>
-              <p>Inbox zero! No unread priority emails.</p>
+              <p className="font-medium text-neutral-700">✉️ Your inbox is all clear!</p>
+              <p className="text-sm text-neutral-400 mt-1">No unread priority emails.</p>
             </div>
           ) : (
             emails.map((email) => {
-              // Parse sender name (e.g. "John Doe <john@doe.com>" -> "John Doe")
               const senderMatch = email.sender.match(/^([^<]+)/);
               const senderName = senderMatch ? senderMatch[1].trim() : email.sender;
               
@@ -63,9 +81,9 @@ export default function EmailList({ emails, loading, onDraftReply }: Props) {
                     {email.summary || email.snippet}
                   </p>
                   <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       className="h-8 text-xs flex items-center gap-1.5"
                       aria-label={`Draft reply to ${senderName}`}
                       onClick={() => onDraftReply(email)}

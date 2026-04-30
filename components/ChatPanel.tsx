@@ -4,14 +4,16 @@ import { useState, useRef, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Bot, Send, User, X } from "lucide-react";
+import { Bot, Send, X, AlertCircle } from "lucide-react";
 
 interface Message {
   id: string;
   role: "user" | "model";
   content: string;
+  isError?: boolean;
 }
+
+const TIMEOUT_MS = 15000;
 
 export default function ChatPanel() {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,58 +28,91 @@ export default function ChatPanel() {
     }
   }, [messages]);
 
+  const addErrorMessage = (text: string) => {
+    setMessages(prev => [...prev, {
+      id: Date.now().toString(),
+      role: "model",
+      content: text,
+      isError: true,
+    }]);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
 
     const userMessage: Message = { id: Date.now().toString(), role: "user", content: input };
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages(prev => [...prev, userMessage]);
     setInput("");
     setIsLoading(true);
 
+    const timeoutId = setTimeout(() => {
+      setIsLoading(false);
+      addErrorMessage("⏱️ Response timed out. Please try again.");
+    }, TIMEOUT_MS);
+
     try {
-      const history = [...messages.slice(-9), userMessage]; // Keep last 10 turns
+      const history = [...messages.slice(-9), userMessage];
+      const controller = new AbortController();
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: history }),
+        signal: controller.signal,
       });
 
-      if (!response.ok) throw new Error("Failed to get response");
-      
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const isAiError = response.status === 503;
+        addErrorMessage(isAiError
+          ? "🤖 AI is unavailable right now. Please try again later."
+          : `Something went wrong: ${data.error || "Unknown error"}`
+        );
+        return;
+      }
+
       const reader = response.body?.getReader();
-      if (!reader) throw new Error("No reader");
+      if (!reader) {
+        addErrorMessage("Failed to read response. Please try again.");
+        return;
+      }
 
       const decoder = new TextDecoder();
       let done = false;
       let modelContent = "";
       const modelMessageId = (Date.now() + 1).toString();
 
-      setMessages((prev) => [...prev, { id: modelMessageId, role: "model", content: "" }]);
+      setMessages(prev => [...prev, { id: modelMessageId, role: "model", content: "" }]);
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
         if (value) {
           modelContent += decoder.decode(value, { stream: true });
-          setMessages((prev) => 
-            prev.map((msg) => 
+          setMessages(prev =>
+            prev.map(msg =>
               msg.id === modelMessageId ? { ...msg, content: modelContent } : msg
             )
           );
         }
       }
-    } catch (error) {
-      console.error("Chat error:", error);
-      setMessages((prev) => [...prev, { id: Date.now().toString(), role: "model", content: "Sorry, I encountered an error processing your request." }]);
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name !== "AbortError") {
+        addErrorMessage("🤖 AI is unavailable, try again.");
+      }
     } finally {
+      clearTimeout(timeoutId);
       setIsLoading(false);
     }
   };
 
   if (!isOpen) {
     return (
-      <Button 
+      <Button
         onClick={() => setIsOpen(true)}
         aria-label="Open chat panel"
         className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg p-0 flex items-center justify-center bg-blue-600 hover:bg-blue-700"
@@ -99,35 +134,39 @@ export default function ChatPanel() {
         </Button>
       </CardHeader>
       <CardContent className="flex-1 p-0 overflow-hidden relative">
-        <div 
-          ref={scrollRef}
-          className="h-full overflow-y-auto p-4 space-y-4 bg-neutral-50/50"
-        >
+        <div ref={scrollRef} className="h-full overflow-y-auto p-4 space-y-4 bg-neutral-50/50">
           {messages.length === 0 && (
             <div className="text-center text-neutral-500 my-8">
               <Bot className="h-10 w-10 mx-auto text-blue-300 mb-3" />
               <p className="text-sm">Ask me about your schedule or emails.</p>
               <div className="mt-4 flex flex-col gap-2">
-                <button onClick={() => setInput("What is my next meeting?")} className="text-xs bg-white border border-neutral-200 rounded p-2 text-left hover:bg-neutral-50 transition-colors">"What is my next meeting?"</button>
-                <button onClick={() => setInput("Do I have time for lunch today?")} className="text-xs bg-white border border-neutral-200 rounded p-2 text-left hover:bg-neutral-50 transition-colors">"Do I have time for lunch today?"</button>
+                <button onClick={() => setInput("What is my next meeting?")} className="text-xs bg-white border border-neutral-200 rounded p-2 text-left hover:bg-neutral-50 transition-colors">&quot;What is my next meeting?&quot;</button>
+                <button onClick={() => setInput("Do I have time for lunch today?")} className="text-xs bg-white border border-neutral-200 rounded p-2 text-left hover:bg-neutral-50 transition-colors">&quot;Do I have time for lunch today?&quot;</button>
               </div>
             </div>
           )}
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[80%] rounded-2xl p-3 text-sm ${
-                m.role === "user" ? "bg-blue-600 text-white rounded-tr-sm" : "bg-white border border-neutral-200 text-neutral-800 rounded-tl-sm shadow-sm"
-              }`}>
-                <div className="whitespace-pre-wrap">{m.content}</div>
-              </div>
+              {m.isError ? (
+                <div className="max-w-[85%] flex items-start gap-2 bg-red-50 border border-red-100 text-red-700 rounded-2xl p-3 text-sm">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+                  <span>{m.content}</span>
+                </div>
+              ) : (
+                <div className={`max-w-[80%] rounded-2xl p-3 text-sm ${
+                  m.role === "user" ? "bg-blue-600 text-white rounded-tr-sm" : "bg-white border border-neutral-200 text-neutral-800 rounded-tl-sm shadow-sm"
+                }`}>
+                  <div className="whitespace-pre-wrap">{m.content}</div>
+                </div>
+              )}
             </div>
           ))}
           {isLoading && (
             <div className="flex justify-start">
               <div className="bg-white border border-neutral-200 text-neutral-800 rounded-2xl rounded-tl-sm shadow-sm p-4 flex gap-1 items-center">
-                <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></div>
+                <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" />
               </div>
             </div>
           )}
@@ -135,10 +174,10 @@ export default function ChatPanel() {
       </CardContent>
       <CardFooter className="p-3 bg-white border-t border-neutral-100 rounded-b-xl">
         <form onSubmit={handleSubmit} className="flex w-full items-center gap-2">
-          <Input 
-            value={input} 
-            onChange={(e) => setInput(e.target.value)} 
-            placeholder="Ask about your day..." 
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask about your day..."
             aria-label="Chat input"
             className="flex-1 border-neutral-200 focus-visible:ring-blue-500"
             disabled={isLoading}

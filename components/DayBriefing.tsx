@@ -1,23 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { DayBriefingData } from "@/types";
-import { Sparkles, AlertCircle, Target } from "lucide-react";
+import { Sparkles, AlertCircle, Target, RefreshCw } from "lucide-react";
 
 interface Props {
   briefing: DayBriefingData | null;
   loading: boolean;
+  error: string;
+  onRetry: () => void;
 }
 
-export default function DayBriefing({ briefing, loading }: Props) {
+export default function DayBriefing({ briefing, loading, error, onRetry }: Props) {
   if (loading) {
     return (
       <Card className="w-full bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-100" aria-live="polite" aria-busy={true}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-blue-900">
-            <Sparkles className="h-5 w-5" aria-hidden="true" />
+            <Sparkles className="h-5 w-5 animate-pulse" aria-hidden="true" />
             Generating Daily Briefing...
           </CardTitle>
         </CardHeader>
@@ -25,6 +27,43 @@ export default function DayBriefing({ briefing, loading }: Props) {
           <Skeleton className="h-4 w-full bg-blue-100" />
           <Skeleton className="h-4 w-5/6 bg-blue-100" />
           <Skeleton className="h-4 w-4/6 bg-blue-100" />
+          <div className="grid grid-cols-2 gap-6 pt-4 border-t border-blue-100/50">
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-1/3 bg-blue-100" />
+              <Skeleton className="h-3 w-full bg-blue-100" />
+              <Skeleton className="h-3 w-5/6 bg-blue-100" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-1/3 bg-blue-100" />
+              <Skeleton className="h-3 w-full bg-blue-100" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card className="w-full bg-gradient-to-br from-amber-50 to-orange-50 border-amber-100" aria-live="polite">
+        <CardContent className="flex items-center gap-4 p-6">
+          <div className="flex-shrink-0 bg-amber-100 p-2 rounded-full">
+            <AlertCircle className="h-6 w-6 text-amber-600" aria-hidden="true" />
+          </div>
+          <div className="flex-1">
+            <p className="font-medium text-amber-900">⚠️ Couldn&apos;t load your briefing.</p>
+            <p className="text-sm text-amber-700 mt-0.5">Please refresh or try again.</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetry}
+            className="shrink-0 border-amber-300 text-amber-800 hover:bg-amber-100"
+            aria-label="Retry loading briefing"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" />
+            Retry
+          </Button>
         </CardContent>
       </Card>
     );
@@ -37,7 +76,7 @@ export default function DayBriefing({ briefing, loading }: Props) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-blue-900">
           <Sparkles className="h-5 w-5 text-blue-600" aria-hidden="true" />
-          Today's AI Briefing
+          Today&apos;s AI Briefing
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">

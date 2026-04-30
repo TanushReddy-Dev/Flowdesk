@@ -10,10 +10,23 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const events = await fetchTodayEvents((session as any).accessToken);
+    let events;
+    try {
+      events = await fetchTodayEvents((session as any).accessToken);
+    } catch (googleError: any) {
+      console.error("Google Calendar API error:", googleError);
+      return NextResponse.json(
+        { error: "Google service unavailable" },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json({ events });
   } catch (error: any) {
-    console.error("Calendar API error:", error);
-    return NextResponse.json({ error: error.message || "Failed to fetch calendar events" }, { status: 500 });
+    console.error("Calendar route error:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to fetch calendar events" },
+      { status: 500 }
+    );
   }
 }

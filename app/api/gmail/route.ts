@@ -11,16 +11,25 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const emails = await fetchUnreadEmails((session as any).accessToken, 15);
-    
-    // Process summaries concurrently
+    let emails;
+    try {
+      emails = await fetchUnreadEmails((session as any).accessToken, 15);
+    } catch (googleError: any) {
+      console.error("Gmail API error:", googleError);
+      return NextResponse.json(
+        { error: "Google service unavailable" },
+        { status: 503 }
+      );
+    }
+
+    // Summarize concurrently; degrade gracefully per email
     const emailsWithSummaries = await Promise.all(
       emails.map(async (email) => {
         try {
           const summary = await generateEmailSummary(email.bodyText || email.snippet);
           return { ...email, summary };
-        } catch (error) {
-          console.error(`Failed to summarize email ${email.id}`, error);
+        } catch (geminiError: any) {
+          console.error(`Failed to summarize email ${email.id}:`, geminiError);
           return { ...email, summary: "Summary unavailable." };
         }
       })
@@ -28,7 +37,10 @@ export async function GET() {
 
     return NextResponse.json({ emails: emailsWithSummaries });
   } catch (error: any) {
-    console.error("Gmail API error:", error);
-    return NextResponse.json({ error: error.message || "Failed to fetch emails" }, { status: 500 });
+    console.error("Gmail route error:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to fetch emails" },
+      { status: 500 }
+    );
   }
 }

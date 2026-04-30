@@ -9,70 +9,108 @@ import CalendarView from "@/components/CalendarView";
 import ChatPanel from "@/components/ChatPanel";
 import DraftModal from "@/components/DraftModal";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle } from "lucide-react";
 
 export default function DashboardPage() {
   const { data: session, status } = useSession();
-  
+
   const [emails, setEmails] = useState<EmailInfo[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [briefing, setBriefing] = useState<DayBriefingData | null>(null);
-  
+
   const [emailsLoading, setEmailsLoading] = useState(true);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [briefingLoading, setBriefingLoading] = useState(true);
-  
-  const [error, setError] = useState("");
+
+  const [emailsError, setEmailsError] = useState("");
+  const [eventsError, setEventsError] = useState("");
+  const [briefingError, setBriefingError] = useState("");
+
   const [selectedEmail, setSelectedEmail] = useState<EmailInfo | null>(null);
 
-  const fetchData = useCallback(async () => {
+  const fetchEmails = useCallback(async () => {
+    setEmailsLoading(true);
+    setEmailsError("");
     try {
-      // Fetch emails
-      const emailsRes = await fetch("/api/gmail");
-      const emailsData = await emailsRes.json();
-      if (!emailsRes.ok) throw new Error(emailsData.error || "Failed to fetch emails");
-      setEmails(emailsData.emails);
-      setEmailsLoading(false);
-
-      // Fetch events
-      const eventsRes = await fetch("/api/calendar");
-      const eventsData = await eventsRes.json();
-      if (!eventsRes.ok) throw new Error(eventsData.error || "Failed to fetch events");
-      setEvents(eventsData.events);
-      setEventsLoading(false);
-
-      // Fetch briefing (using emails and events client-side might be slow, so we could have an endpoint, 
-      // but we don't have a specific endpoint. We can call Gemini directly using an API route or pass data.
-      // Wait, let's create a briefing API route!)
-      // Wait, let me check the instructions. "On dashboard load, fetch: last 10 unread emails + today's calendar events, Send both to Gemini..."
-      // I can add a `/api/briefing` route, or I can do it here by POSTing to `/api/briefing`. 
-      // I haven't created `/api/briefing` yet. I will create it.
-      
-      const briefingRes = await fetch("/api/briefing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emails: emailsData.emails, events: eventsData.events })
-      });
-      const briefingData = await briefingRes.json();
-      if (briefingRes.ok) {
-        setBriefing(briefingData.briefing);
-      }
-      setBriefingLoading(false);
-      
+      const res = await fetch("/api/gmail");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to fetch emails");
+      setEmails(data.emails);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "An error occurred while fetching your data");
+      setEmailsError(err.message || "Failed to fetch emails");
+    } finally {
       setEmailsLoading(false);
+    }
+  }, []);
+
+  const fetchEvents = useCallback(async () => {
+    setEventsLoading(true);
+    setEventsError("");
+    try {
+      const res = await fetch("/api/calendar");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to fetch events");
+      setEvents(data.events);
+    } catch (err: any) {
+      console.error(err);
+      setEventsError(err.message || "Failed to fetch events");
+    } finally {
       setEventsLoading(false);
+    }
+  }, []);
+
+  const fetchBriefing = useCallback(async (emailData: EmailInfo[], eventData: CalendarEvent[]) => {
+    setBriefingLoading(true);
+    setBriefingError("");
+    try {
+      const res = await fetch("/api/briefing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: emailData, events: eventData }),
+      });
+      const data = await res.json();
+      if (res.ok) setBriefing(data.briefing);
+      else throw new Error(data.error || "Failed to generate briefing");
+    } catch (err: any) {
+      console.error(err);
+      setBriefingError(err.message || "Failed to generate briefing");
+    } finally {
       setBriefingLoading(false);
     }
   }, []);
 
+  const fetchAll = useCallback(async () => {
+    // Fetch emails and events in parallel
+    const [fetchedEmails, fetchedEvents] = await Promise.all([
+      fetch("/api/gmail").then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) { setEmailsError(d.error || "Failed to fetch emails"); setEmailsLoading(false); return [] as EmailInfo[]; }
+        setEmails(d.emails);
+        setEmailsLoading(false);
+        return d.emails as EmailInfo[];
+      }).catch((e) => { setEmailsError(e.message); setEmailsLoading(false); return [] as EmailInfo[]; }),
+      fetch("/api/calendar").then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) { setEventsError(d.error || "Failed to fetch events"); setEventsLoading(false); return [] as CalendarEvent[]; }
+        setEvents(d.events);
+        setEventsLoading(false);
+        return d.events as CalendarEvent[];
+      }).catch((e) => { setEventsError(e.message); setEventsLoading(false); return [] as CalendarEvent[]; }),
+    ]);
+
+    // Only fetch briefing if we have some data
+    await fetchBriefing(fetchedEmails, fetchedEvents);
+  }, [fetchBriefing]);
+
   useEffect(() => {
     if (status === "authenticated") {
-      fetchData();
+      fetchAll();
     }
-  }, [status, fetchData]);
+  }, [status, fetchAll]);
+
+  const retryBriefing = useCallback(() => {
+    fetchBriefing(emails, events);
+  }, [emails, events, fetchBriefing]);
 
   if (status === "loading") {
     return (
@@ -92,29 +130,31 @@ export default function DashboardPage() {
         <h1 className="text-3xl font-bold tracking-tight text-neutral-900 mb-2">
           Good morning, {session?.user?.name?.split(" ")[0] || "there"}
         </h1>
-        <p className="text-neutral-500">Here's what you need to know today.</p>
+        <p className="text-neutral-500">Here&apos;s what you need to know today.</p>
       </div>
 
-      {error && (
-        <div className="mb-8 p-4 bg-red-50 text-red-700 rounded-lg flex items-center gap-3 border border-red-100">
-          <AlertCircle className="h-5 w-5 flex-shrink-0" />
-          <p>{error}</p>
-        </div>
-      )}
-
       <div className="space-y-8 pb-20">
-        <DayBriefing briefing={briefing} loading={briefingLoading} />
-        
+        <DayBriefing
+          briefing={briefing}
+          loading={briefingLoading}
+          error={briefingError}
+          onRetry={retryBriefing}
+        />
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-          <EmailList 
-            emails={emails} 
-            loading={emailsLoading} 
-            onDraftReply={setSelectedEmail} 
+          <EmailList
+            emails={emails}
+            loading={emailsLoading}
+            error={emailsError}
+            onDraftReply={setSelectedEmail}
+            onRetry={fetchEmails}
           />
-          <CalendarView 
-            events={events} 
-            loading={eventsLoading} 
+          <CalendarView
+            events={events}
+            loading={eventsLoading}
+            error={eventsError}
             conflicts={briefing?.conflicts || []}
+            onRetry={fetchEvents}
           />
         </div>
       </div>
