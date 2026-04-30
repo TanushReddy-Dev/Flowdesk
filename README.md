@@ -77,6 +77,36 @@ FlowDesk is an intelligent, AI-powered workday assistant built for professionals
 
 ---
 
+## Deploy to Google Cloud Run
+
+FlowDesk is optimized for containerized deployment on Google Cloud Run. Follow these steps to deploy:
+
+1. **Install and Initialize Google Cloud SDK:**
+   Make sure you have the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install) installed and authenticated.
+   ```bash
+   gcloud auth login
+   gcloud config set project YOUR_PROJECT_ID
+   ```
+
+2. **Set up Secrets in Cloud Run:**
+   Before deploying, ensure you configure the environment variables (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `GEMINI_API_KEY`) as Secrets in the Google Cloud Secret Manager or define them directly in the Cloud Run service configuration after the initial deployment.
+
+3. **Deploy using the helper script:**
+   A `deploy.sh` script is provided which triggers Google Cloud Build using the `cloudbuild.yaml` configuration.
+   ```bash
+   chmod +x deploy.sh
+   ./deploy.sh
+   ```
+
+   *Alternatively, run the command manually:*
+   ```bash
+   gcloud builds submit --config cloudbuild.yaml
+   ```
+
+This will build a Docker image, push it to Google Container Registry, and deploy a managed, highly-available Cloud Run service in `us-central1` with `0` to `2` auto-scaling instances.
+
+---
+
 ## Environment Variables
 
 | Variable | Description |
