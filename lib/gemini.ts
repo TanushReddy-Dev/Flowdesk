@@ -10,10 +10,11 @@ export function getGeminiModel(modelName = "gemini-2.5-flash") {
   return genAI.getGenerativeModel({ model: modelName });
 }
 
-export async function generateDailyBriefing(emails: any[], events: any[]) {
-  const model = getGeminiModel("gemini-2.5-pro");
-  
-  const prompt = `
+export function buildDailyBriefingPrompt(
+  emails: Array<{ sender: string; subject: string; snippet: string }>,
+  events: unknown[]
+) {
+  return `
     You are a professional executive assistant. Analyze the user's emails and calendar for today.
     Return a JSON with EXACTLY this structure:
     {
@@ -25,16 +26,24 @@ export async function generateDailyBriefing(emails: any[], events: any[]) {
     
     Context:
     Today's Events: ${JSON.stringify(events)}
-    Unread Emails: ${JSON.stringify(emails.map(e => ({ sender: e.sender, subject: e.subject, snippet: e.snippet })))}
+    Unread Emails: ${JSON.stringify(emails.map((e) => ({ sender: e.sender, subject: e.subject, snippet: e.snippet })))}
     
     Ensure the output is ONLY valid JSON. No markdown formatting like \`\`\`json.
   `;
+}
+
+export async function generateDailyBriefing(
+  emails: Array<{ sender: string; subject: string; snippet: string }>,
+  events: unknown[]
+) {
+  const model = getGeminiModel("gemini-2.5-pro");
+  const prompt = buildDailyBriefingPrompt(emails, events);
 
   const result = await model.generateContent(prompt);
-  const text = result.response.text().replace(/```json/gi, '').replace(/```/g, '').trim();
+  const text = result.response.text().replace(/```json/gi, "").replace(/```/g, "").trim();
   try {
     return JSON.parse(text);
-  } catch (error) {
+  } catch {
     console.error("Failed to parse daily briefing JSON:", text);
     throw new Error("Failed to generate valid briefing");
   }

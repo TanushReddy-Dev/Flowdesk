@@ -16,6 +16,15 @@ interface Props {
 }
 
 export default function CalendarView({ events, loading, error, conflicts, onRetry }: Props) {
+  const sortedEvents = [...events].sort((a, b) => {
+    const aTime = new Date(a.startTime).getTime();
+    const bTime = new Date(b.startTime).getTime();
+    if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
+    if (Number.isNaN(aTime)) return 1;
+    if (Number.isNaN(bTime)) return -1;
+    return aTime - bTime;
+  });
+
   return (
     <Card className="col-span-1 shadow-sm w-full">
       <CardHeader className="border-b bg-neutral-50/50 p-4 md:p-6">
@@ -59,7 +68,7 @@ export default function CalendarView({ events, loading, error, conflicts, onRetr
             </div>
           ) : (
             <div className="space-y-3 md:space-y-5">
-              {events.map((event) => {
+              {sortedEvents.map((event) => {
                 const startDate = new Date(event.startTime);
                 const endDate = new Date(event.endTime);
                 const timeString = isNaN(startDate.getTime())
@@ -70,12 +79,13 @@ export default function CalendarView({ events, loading, error, conflicts, onRetr
                 );
 
                 return (
-                  <div
-                    key={event.id}
-                    className={`flex items-start gap-3 p-3 md:p-4 rounded-xl border ${
-                      isConflict
-                        ? "border-red-200 bg-red-50/50"
-                        : "border-neutral-200 bg-white"
+                    <div
+                      key={event.id}
+                      data-testid={`calendar-event-${event.id}`}
+                      className={`flex items-start gap-3 p-3 md:p-4 rounded-xl border ${
+                        isConflict
+                          ? "border-red-200 bg-red-50/50"
+                          : "border-neutral-200 bg-white"
                     } shadow-sm`}
                   >
                     <div

@@ -1,5 +1,37 @@
 import { google } from "googleapis";
 
+type HeaderValue = {
+  name?: string | null;
+  value?: string | null;
+};
+
+type GmailMessagePayload = {
+  headers?: HeaderValue[] | null;
+};
+
+export type GmailMessageLike = {
+  id?: string | null;
+  snippet?: string | null;
+  payload?: GmailMessagePayload | null;
+};
+
+export function parseGmailMessages(messages: GmailMessageLike[]) {
+  return messages.flatMap((message) => {
+    if (!message.id) return [];
+    const headers = message.payload?.headers || [];
+    const subject = headers.find((h) => h.name?.toLowerCase() === "subject")?.value || "No Subject";
+    const sender = headers.find((h) => h.name?.toLowerCase() === "from")?.value || "Unknown Sender";
+    return [
+      {
+        id: message.id,
+        subject,
+        sender,
+        snippet: message.snippet || "",
+      },
+    ];
+  });
+}
+
 export async function getGmailClient(accessToken: string) {
   const oauth2Client = new google.auth.OAuth2();
   oauth2Client.setCredentials({ access_token: accessToken });
@@ -27,9 +59,6 @@ export async function fetchUnreadEmails(accessToken: string, maxResults = 15) {
 
     const payload = msgData.data.payload;
     const headers = payload?.headers || [];
-    
-    const subject = headers.find((h) => h.name?.toLowerCase() === "subject")?.value || "No Subject";
-    const sender = headers.find((h) => h.name?.toLowerCase() === "from")?.value || "Unknown Sender";
     const date = headers.find((h) => h.name?.toLowerCase() === "date")?.value || "";
 
     // Extract plain text body
@@ -43,13 +72,23 @@ export async function fetchUnreadEmails(accessToken: string, maxResults = 15) {
       bodyText = Buffer.from(payload.body.data, "base64").toString("utf-8");
     }
 
+    const [parsed] = parseGmailMessages([
+      {
+        id: message.id,
+        snippet: msgData.data.snippet,
+        payload: {
+          headers,
+        },
+      },
+    ]);
+
     emails.push({
-      id: message.id,
-      subject,
-      sender,
+      id: parsed.id,
+      subject: parsed.subject,
+      sender: parsed.sender,
       timestamp: date,
-      snippet: msgData.data.snippet || "",
-      bodyText: bodyText.substring(0, 1000) // Truncate body to save tokens
+      snippet: parsed.snippet,
+      bodyText: bodyText.substring(0, 1000), // Truncate body to save tokens
     });
   }
 
