@@ -9,6 +9,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "FlowDesk - AI-powered Workday Assistant",
   description: "Connect your Gmail and Google Calendar to get an AI-powered summary of your workday.",
+  verification: {
+    google: "VRKBAbFjmPaRTRxQIy9HHTroN8fPcl_Er4IzpGZRhFI",
+  },
 };
 
 export default function RootLayout({
