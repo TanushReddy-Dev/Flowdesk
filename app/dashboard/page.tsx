@@ -133,7 +133,7 @@ export default function DashboardPage() {
         <p className="text-neutral-500">Here&apos;s what you need to know today.</p>
       </div>
 
-      <div className="space-y-8 pb-20">
+      <div className="space-y-6 md:space-y-8 pb-24">
         <DayBriefing
           briefing={briefing}
           loading={briefingLoading}
@@ -141,7 +141,7 @@ export default function DashboardPage() {
           onRetry={retryBriefing}
         />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 items-start">
           <EmailList
             emails={emails}
             loading={emailsLoading}

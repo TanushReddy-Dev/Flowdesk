@@ -2,7 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { EmailInfo } from "@/types";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sparkles, Copy, Check, RefreshCw, AlertCircle } from "lucide-react";
@@ -38,18 +44,15 @@ export default function DraftModal({ email, onClose }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emailContent: content }),
       });
-
       const data = await response.json();
-
       if (!response.ok) {
-        const isAiError = response.status === 503;
-        setError(isAiError
-          ? "AI service is currently unavailable. Please try again later."
-          : "Couldn't generate draft. Please try again."
+        setError(
+          response.status === 503
+            ? "AI service is currently unavailable. Please try again later."
+            : "Couldn't generate draft. Please try again."
         );
         return;
       }
-
       setDraft(data.draft);
     } catch {
       setError("Couldn't generate draft. Please try again.");
@@ -64,28 +67,29 @@ export default function DraftModal({ email, onClose }: Props) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // clipboard write failed silently — button just won't toggle
+      // clipboard failure — no visible crash
     }
   };
 
   return (
     <Dialog open={!!email} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[600px] gap-6">
+      {/* Full-screen on mobile, centered dialog on desktop */}
+      <DialogContent className="w-full h-full max-h-full rounded-none sm:h-auto sm:max-h-[90vh] sm:max-w-[600px] sm:rounded-2xl flex flex-col gap-4 p-4 sm:p-6">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Sparkles className="h-5 w-5 text-blue-500" aria-hidden="true" />
+          <DialogTitle className="flex items-center gap-2 text-lg md:text-xl">
+            <Sparkles className="h-5 w-5 text-blue-500 shrink-0" aria-hidden="true" />
             AI Draft Reply
           </DialogTitle>
         </DialogHeader>
 
         {email && (
           <div className="bg-neutral-50 rounded-lg p-3 text-sm text-neutral-600 border border-neutral-100">
-            <div className="font-medium text-neutral-900 mb-1">Replying to: {email.sender}</div>
-            <div className="truncate">Subject: {email.subject}</div>
+            <div className="font-medium text-neutral-900 mb-1 truncate">Replying to: {email.sender}</div>
+            <div className="truncate text-xs">Subject: {email.subject}</div>
           </div>
         )}
 
-        <div className="min-h-[200px]" aria-live="polite" aria-busy={isLoading}>
+        <div className="flex-1 min-h-[200px]" aria-live="polite" aria-busy={isLoading}>
           {isLoading ? (
             <div className="space-y-3">
               <Skeleton className="h-4 w-full" />
@@ -98,7 +102,7 @@ export default function DraftModal({ email, onClose }: Props) {
               </div>
             </div>
           ) : error ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center h-full">
               <div className="bg-red-50 p-3 rounded-full">
                 <AlertCircle className="h-6 w-6 text-red-400" aria-hidden="true" />
               </div>
@@ -107,6 +111,7 @@ export default function DraftModal({ email, onClose }: Props) {
                 variant="outline"
                 size="sm"
                 onClick={() => email && generateDraft(email.bodyText || email.snippet)}
+                className="min-h-[44px]"
                 aria-label="Retry draft generation"
               >
                 <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" />
@@ -115,7 +120,7 @@ export default function DraftModal({ email, onClose }: Props) {
             </div>
           ) : (
             <textarea
-              className="w-full h-full min-h-[250px] p-4 text-sm bg-white border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-y"
+              className="w-full h-full min-h-[200px] p-3 text-sm bg-white border border-neutral-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-y"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Your draft will appear here..."
@@ -124,14 +129,19 @@ export default function DraftModal({ email, onClose }: Props) {
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={onClose} disabled={isLoading}>
+        <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={isLoading}
+            className="w-full sm:w-auto min-h-[44px]"
+          >
             Cancel
           </Button>
           <Button
             onClick={handleCopy}
             disabled={isLoading || !draft}
-            className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+            className="w-full sm:w-auto min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white gap-2"
           >
             {copied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
             {copied ? "Copied!" : "Copy to Clipboard"}
