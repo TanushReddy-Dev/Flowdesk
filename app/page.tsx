@@ -80,9 +80,9 @@ export default function LandingPage() {
         <footer className="mt-8 pb-8 flex flex-col items-center gap-4 text-center text-sm text-white/30">
           <p>Built with Gemini AI + Google Cloud</p>
           <div className="flex gap-4 justify-center">
-            <a href="/privacy.html" className="hover:text-white transition-colors">Privacy Policy</a>
+            <a href="/privacy" className="hover:text-white transition-colors">Privacy Policy</a>
             <span>·</span>
-            <a href="/terms.html" className="hover:text-white transition-colors">Terms of Service</a>
+            <a href="/terms" className="hover:text-white transition-colors">Terms of Service</a>
           </div>
         </footer>
       </div>
